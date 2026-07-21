@@ -7,14 +7,13 @@ import os
 import sqlite3
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from tenable.io import TenableIO
 
 # --- Configuration -----------------------------------------------------------
 
-# Switch to config.py when done debug
-ACCESS_KEY = os.environ.get("TIO_ACCESS_KEY", "")
-SECRET_KEY = os.environ.get("TIO_SECRET_KEY", "")
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 DB_PATH    = f"data/TenableVulnData/tenable_export_{datetime.now().strftime('%m%d%Y')}.db"
 
 # SINCE = last week
@@ -32,6 +31,16 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger(__name__)
+
+
+def load_tio_credentials() -> tuple[str, str]:
+    if not CONFIG_PATH.exists():
+        return "", ""
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as config_file:
+        config = json.load(config_file)
+
+    return config.get("tenable_access", ""), config.get("tenable_secret", "")
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -275,12 +284,14 @@ def upsert_vuln(conn: sqlite3.Connection, vuln: dict) -> None:
 # --- Main -----------------------------------------------------------
 
 def main() -> None:
-    if not ACCESS_KEY or not SECRET_KEY:
+    access_key, secret_key = load_tio_credentials()
+
+    if not access_key or not secret_key:
         raise SystemExit(
-            "ERROR: TIO_ACCESS_KEY and TIO_SECRET_KEY environment variables must be set."
+            f"ERROR: Tenable access and secret keys must be set in {CONFIG_PATH.name}."
         )
 
-    tio = TenableIO(access_key=ACCESS_KEY, secret_key=SECRET_KEY)
+    tio = TenableIO(access_key=access_key, secret_key=secret_key)
 
     # Filters
     vuln_filters: dict = {}
